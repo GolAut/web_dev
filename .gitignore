@@ -1,0 +1,9 @@
+﻿node_modules/
+uploads/*
+!uploads/.gitkeep
+data/*.json
+.env
+*.bak
+*.bak2
+downloaded-libs/
+public/spa/

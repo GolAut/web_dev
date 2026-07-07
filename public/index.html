@@ -1,0 +1,293 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>旅行计划 · 管理后台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tsparticles/slim@3/tsparticles.slim.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&family=Noto+Sans+SC:wght@300..700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#faf7ff;--bg-card:rgba(255,255,255,0.92);--border:rgba(0,0,0,0.04);--shadow:0 1px 3px rgba(0,0,0,0.02),0 1px 2px rgba(0,0,0,0.01);--shadow-hover:0 8px 30px rgba(139,92,246,0.06),0 2px 8px rgba(0,0,0,0.02);--primary:#7c3aed;--primary-light:rgba(124,58,237,0.06);--primary-mid:rgba(124,58,237,0.12);--secondary:#ec4899;--accent:#06b6d4;--text:#1a1430;--text-mid:#3a3450;--text-light:#5a5570;--gradient:linear-gradient(135deg,#a78bfa,#ec4899);--radius:20px;--radius-sm:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter","Noto Sans SC",-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
+#three-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+#particles-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+
+.cursor-glow{position:fixed;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,0.07),transparent 70%);pointer-events:none;z-index:9999;transform:translate(-50%,-50%)}
+
+/* Login */
+.login-wrapper{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.login-wrapper>*{pointer-events:auto}
+.login-card{background:var(--bg-card);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:28px;padding:3rem 2.5rem;max-width:400px;width:90%;text-align:center;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.login-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--gradient)}
+.login-card .icon{font-size:3rem;margin-bottom:.8rem;display:inline-block;filter:drop-shadow(0 0 20px rgba(139,92,246,0.1))}
+.login-card h2{font-size:1.5rem;font-weight:700;color:var(--text);margin-bottom:.3rem}
+.login-card p{color:var(--text-light);font-size:.9rem;margin-bottom:2rem}
+.login-card .el-input__inner{background:rgba(0,0,0,0.02);border:1px solid rgba(0,0,0,0.06);color:var(--text);border-radius:var(--radius-sm);height:48px;transition:all .2s;font-size:.95rem}
+.login-card .el-input__inner:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light);background:#fff}
+.login-card .el-button--primary{width:100%;border-radius:var(--radius-sm);height:48px;background:var(--gradient);border:none;font-size:1rem;font-weight:600;transition:all .2s}
+.login-card .el-button--primary:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(124,58,237,0.2)}
+
+/* Dashboard Layout */
+.admin-container{position:relative;z-index:5;max-width:1040px;margin:0 auto;padding:1.5rem}
+.dash-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:1.5rem}
+.dash-header h1{font-size:1.3rem;font-weight:700;color:var(--text)}
+.dash-header .user-section{display:flex;align-items:center;gap:1rem;font-size:.85rem;color:var(--text)}
+.logout-btn{background:transparent;border:1px solid var(--border);color:var(--text-mid);border-radius:10px;padding:.45rem 1rem;cursor:pointer;transition:all .2s;font-size:.85rem}
+.logout-btn:hover{border-color:#f87171;color:#f87171}
+
+/* Tabs */
+.tab-bar{display:flex;gap:1rem;padding:0;margin-bottom:1.5rem}
+.tab-btn{font-size:.9rem;font-weight:600;color:var(--text-mid);cursor:pointer;transition:all .2s;padding:.5rem 0;border:none;background:none;border-bottom:2px solid transparent;position:relative}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
+
+/* Bento Grid Stats (react-bits inspired) */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;box-shadow:var(--shadow);transition:all .3s cubic-bezier(.34,1.56,.64,1);cursor:default}
+.stat-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-hover)}
+.stat-card:nth-child(1){border-top:3px solid var(--primary)}
+.stat-card:nth-child(2){border-top:3px solid var(--secondary)}
+.stat-card:nth-child(3){border-top:3px solid var(--accent)}
+.stat-num{font-size:1.8rem;font-weight:700;color:var(--text);margin-bottom:.15rem}
+.stat-label{font-size:.82rem;color:var(--text-light)}
+
+/* Upload */
+.upload-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.8rem;box-shadow:var(--shadow);margin-bottom:1.5rem}
+.upload-zone{border:1.5px dashed rgba(124,58,237,0.15);border-radius:var(--radius);padding:2.5rem;text-align:center;transition:all .25s;cursor:pointer;background:rgba(124,58,237,0.02)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:var(--primary-light);transform:scale(1.005)}
+.upload-zone .icon{font-size:2.2rem;margin-bottom:.5rem}
+.upload-zone p{color:var(--text-light);font-size:.9rem}
+.upload-zone p strong{color:var(--text)}
+.upload-form{margin-top:1rem}
+
+/* Table */
+.table-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.8rem;box-shadow:var(--shadow);overflow:hidden}
+.el-table{background:transparent!important}
+.el-table th{background:rgba(139,92,246,0.03)!important;color:var(--text-mid)!important;border-bottom:1px solid var(--border)!important;font-weight:600!important;font-size:.82rem!important}
+.el-table td{background:transparent!important;color:var(--text)!important;border-bottom:1px solid var(--border)!important;font-size:.85rem!important}
+.el-table__body tr:nth-child(even) td{background:rgba(139,92,246,0.015)!important}
+.el-table--enable-row-hover .el-table__body tr:hover>td{background:var(--primary-light)!important}
+.el-table .code-badge{color:var(--primary);background:var(--primary-light);padding:2px 8px;border-radius:6px;font-family:monospace;font-size:.8rem}
+.el-tag{background:var(--primary-light)!important;border-color:rgba(124,58,237,0.15)!important;color:var(--primary)!important;border-radius:8px!important}
+.el-button--text{font-weight:500!important}
+.el-button--primary{border-radius:10px!important}
+.empty-state{padding:3rem;text-align:center;color:var(--text-light)}
+
+/* User Management Cards */
+.user-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.8rem;box-shadow:var(--shadow);margin-bottom:1.5rem}
+.user-card h3{font-size:1rem;font-weight:600;color:var(--text);margin-bottom:1.2rem;padding-bottom:.8rem;border-bottom:1px solid var(--border)}
+
+.pwd-form .el-input__inner{background:rgba(0,0,0,0.02);border:1px solid rgba(0,0,0,0.06);color:var(--text);border-radius:var(--radius-sm);height:42px}
+.pwd-form .el-input__inner:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
+
+.log-table .log-header{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;font-size:.8rem;color:var(--text-light);border-bottom:1px solid var(--border);font-weight:500}
+.log-row{display:flex;align-items:center;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--border);font-size:.82rem;color:var(--text-mid);transition:background .15s}
+.log-row:hover{background:rgba(139,92,246,0.015)}
+.log-row .log-time{min-width:140px;color:var(--text)}
+.log-row .log-ip{min-width:90px;color:var(--text-mid)}
+.log-row .log-agent{color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px}
+
+/* Loading/Empty */
+.loading-screen{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;background:var(--bg)}
+.spinner{width:28px;height:28px;border:2.5px solid rgba(139,92,246,0.1);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:700px){
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .admin-container{padding:1rem}
+  .login-card{padding:2rem 1.5rem}
+  .dash-header{flex-direction:column;text-align:center;gap:.5rem}
+  .dash-header .user-section{flex-wrap:wrap;justify-content:center}
+}
+</style>
+</head>
+<body>
+<div class="cursor-glow" id="cursorGlow"></div>
+<div id="three-bg"></div>
+<div id="particles-bg"></div>
+
+<div id="app">
+  <div class="loading-screen" v-if="checkingLogin">
+    <div class="spinner"></div>
+    <p style="font-size:.9rem;color:var(--text-light)">加载中...</p>
+  </div>
+
+  <!-- Login -->
+  <div class="login-wrapper" v-if="!loggedIn && !checkingLogin">
+    <div class="login-card" id="loginCard">
+      <div class="icon">🗺️</div>
+      <h2>欢迎回来</h2>
+      <p>登录以管理旅行计划</p>
+      <el-form @submit.native.prevent="handleLogin">
+        <el-form-item><el-input v-model="loginForm.username" placeholder="用户名" prefix-icon="el-icon-user"></el-input></el-form-item>
+        <el-form-item><el-input v-model="loginForm.password" type="password" placeholder="密码" prefix-icon="el-icon-lock" @keyup.enter.native="handleLogin"></el-input></el-form-item>
+        <el-form-item><el-button class="magnetic-btn" type="primary" @click="handleLogin" :loading="logging">{{ logging ? '登录中...' : '登 录' }}</el-button></el-form-item>
+        <div style="color:#f87171;font-size:.82rem" v-if="loginError">{{ loginError }}</div>
+      </el-form>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="admin-container" v-else-if="loggedIn" id="dashContent">
+    <div class="dash-header" id="dashHeader">
+      <div><h1>🗺️ 旅行计划管理</h1></div>
+      <div class="user-section">
+        <span>👤 {{ username }}</span>
+        <span v-if="userInfo" style="font-size:.8rem;color:var(--text-light)">登录 {{ userInfo.total_logins||0 }} 次</span>
+        <span class="logout-btn" @click="logout">退出</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar" id="tabBar">
+      <div :class="['tab-btn', {active:activeTab==='plans'}]" @click="switchTab('plans')">📋 计划管理</div>
+      <div :class="['tab-btn', {active:activeTab==='users'}]" @click="switchTab('users')">👤 用户管理</div>
+    </div>
+
+    <!-- Plans Tab -->
+    <div v-show="activeTab==='plans'" id="plansView">
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card tilt-el"><div class="stat-num">{{ plans.length }}</div><div class="stat-label">总计划数</div></div>
+        <div class="stat-card tilt-el"><div class="stat-num">{{ totalViews }}</div><div class="stat-label">总浏览次数</div></div>
+        <div class="stat-card tilt-el"><div class="stat-num">{{ lastUpload }}</div><div class="stat-label">最近上传</div></div>
+      </div>
+
+      <div class="upload-card" id="uploadCard">
+        <div class="upload-zone" @click="triggerUpload" @dragover.prevent="dragover=true" @dragleave="dragover=false" @drop.prevent="handleDrop" :class="{dragover}">
+          <div class="icon">📤</div>
+          <p><strong>上传旅行计划</strong></p>
+          <p style="font-size:.8rem;margin-top:.2rem">点击选择 HTML 文件，或拖拽到此处</p>
+        </div>
+        <input type="file" ref="fileInput" accept=".html,.htm" style="display:none" @change="handleFileSelect">
+        <div class="upload-form" v-if="showUploadForm">
+          <el-form :inline="true" size="small">
+            <el-form-item label="标题"><el-input v-model="uploadTitle" placeholder="输入计划标题" style="width:250px"></el-input></el-form-item>
+            <el-form-item><el-button type="primary" @click="uploadFile" :loading="uploading">{{ uploading ? '上传中...' : '确认上传' }}</el-button></el-form-item>
+            <el-form-item><el-button @click="cancelUpload">取消</el-button></el-form-item>
+          </el-form>
+        </div>
+      </div>
+
+      <div class="table-card" id="plansCard">
+        <div v-if="loadingPlans" class="empty-state"><div class="spinner" style="width:24px;height:24px;margin:0 auto 1rem"></div></div>
+        <div v-else-if="plans.length===0" class="empty-state">
+          <div style="font-size:2.5rem;margin-bottom:.5rem">📭</div>
+          <p style="margin-bottom:.3rem">还没有上传任何计划</p>
+          <p style="font-size:.8rem">点击上方区域上传你的第一个旅行计划</p>
+        </div>
+        <el-table v-else :data="plans" style="width:100%" stripe>
+          <el-table-column prop="id" label="#" width="50"></el-table-column>
+          <el-table-column prop="title" label="标题" min-width="140"></el-table-column>
+          <el-table-column label="密钥" min-width="190">
+            <template slot-scope="s">
+              <span class="code-badge">{{ s.row.access_key }}</span>
+              <el-button type="text" size="mini" @click="copyKey(s.row)" style="color:var(--primary)">复制</el-button>
+              <el-button type="text" size="mini" @click="regenerateKey(s.row)" style="color:#f59e0b">重置</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="views" label="浏览" width="60"></el-table-column>
+          <el-table-column prop="created_at" label="时间" width="130">
+            <template slot-scope="s">{{ formatDate(s.row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="170">
+            <template slot-scope="s">
+              <el-button type="text" size="mini" @click="copyShareUrl(s.row)" style="color:#10b981">🔗 分享</el-button>
+              <el-button type="text" size="mini" @click="openPreview(s.row)" style="color:var(--primary)">👁️ 查看</el-button>
+              <el-button type="text" size="mini" @click="deletePlan(s.row)" style="color:#f87171">🗑️</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </div>
+
+    <!-- Users Tab -->
+    <div v-show="activeTab==='users'" id="usersView">
+      <div class="stats-grid">
+        <div class="stat-card tilt-el"><div class="stat-num">{{ userInfo.total_logins||0 }}</div><div class="stat-label">总登录次数</div></div>
+        <div class="stat-card tilt-el"><div class="stat-num">{{ userInfo.last_login?formatDate(userInfo.last_login):'-' }}</div><div class="stat-label">最后登录</div></div>
+        <div class="stat-card tilt-el"><div class="stat-num">{{ userInfo.created_at?formatDate(userInfo.created_at):'-' }}</div><div class="stat-label">账号创建</div></div>
+      </div>
+
+      <div class="user-card">
+        <h3>🔑 修改密码</h3>
+        <div class="pwd-form" style="max-width:360px">
+          <el-form label-width="80px" size="small">
+            <el-form-item label="旧密码"><el-input v-model="pwdForm.old_password" type="password"></el-input></el-form-item>
+            <el-form-item label="新密码"><el-input v-model="pwdForm.new_password" type="password" placeholder="至少4位"></el-input></el-form-item>
+            <el-form-item><el-button type="primary" @click="changePassword" :loading="changingPwd" class="magnetic-btn" style="background:var(--gradient);border:none;border-radius:10px">{{ changingPwd ? '...' : '修改密码' }}</el-button></el-form-item>
+            <div v-if="pwdMsg" :style="{color:pwdMsgType==='success'?'#10b981':'#f87171',fontSize:'.82rem'}">{{ pwdMsg }}</div>
+          </el-form>
+        </div>
+      </div>
+
+      <div class="user-card">
+        <h3>📋 登录历史 <span style="font-weight:400;font-size:.8rem;color:var(--text-light)">最近50条</span></h3>
+        <div v-if="userInfo.login_history&&userInfo.login_history.length>0">
+          <div class="log-header"><span class="log-time">时间</span><span class="log-ip">IP</span><span class="log-agent">客户端</span></div>
+          <div v-for="(log,i) in userInfo.login_history" :key="i" class="log-row">
+            <span class="log-time">{{ formatDate(log.time) }}</span><span class="log-ip">{{ log.ip }}</span><span class="log-agent">{{ log.agent }}</span>
+          </div>
+        </div>
+        <div v-else class="empty-state" style="padding:2rem">暂无登录记录</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";const API=window.location.origin;new Vue({
+el:'#app',
+data:{checkingLogin:true,loggedIn:false,username:'',token:'',loginForm:{username:'admin',password:'admin123'},logging:false,loginError:'',activeTab:'plans',loadingPlans:false,plans:[],uploadTitle:'',showUploadForm:false,uploading:false,selectedFile:null,dragover:false,userInfo:null,pwdForm:{old_password:'',new_password:''},changingPwd:false,pwdMsg:'',pwdMsgType:''},
+computed:{totalViews(){return this.plans.reduce((s,p)=>s+(p.views||0),0)},lastUpload(){if(!this.plans.length)return'-';return new Date(Math.max(...this.plans.map(p=>new Date(p.created_at)))).toLocaleDateString('zh-CN')}},
+async created(){this.init3D();this.initParticles();this.initCursor();this.initMagnetic();const t=localStorage.getItem('tp_token'),n=localStorage.getItem('tp_username');if(t&&n&&(await this.verifyToken())){this.token=t;this.username=n;this.loggedIn=true;this.$nextTick(async()=>{await this.loadPlans();await this.loadUserInfo();this.$nextTick(()=>{this.animateIn();this.initTilt()})})}this.checkingLogin=false},
+methods:{
+async verifyToken(){try{const r=await fetch(API+'/api/plans',{headers:{Authorization:this.token}});return r.ok}catch(e){return false}},
+async handleLogin(){this.logging=true;this.loginError='';try{const r=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.loginForm)});const d=await r.json();if(!r.ok){this.loginError=d.error||'登录失败';this.logging=false;return}this.token=d.token;this.username=d.username;this.loggedIn=true;localStorage.setItem('tp_token',this.token);localStorage.setItem('tp_username',this.username);this.$nextTick(async()=>{await this.loadPlans();await this.loadUserInfo();this.$nextTick(()=>{this.animateIn();this.initTilt()})})}catch(e){this.loginError='网络错误'}this.logging=false},
+logout(){this.loggedIn=false;this.token='';this.username='';this.userInfo=null;localStorage.removeItem('tp_token');localStorage.removeItem('tp_username')},
+switchTab(t){this.activeTab=t;if(t==='users'&&!this.userInfo)this.loadUserInfo()},
+
+async loadPlans(){this.loadingPlans=true;try{const r=await fetch(API+'/api/plans',{headers:{Authorization:this.token}});if(r.status===401){this.logout();return}this.plans=await r.json()}catch(e){}this.loadingPlans=false},
+triggerUpload(){this.$refs.fileInput.click()},
+handleFileSelect(e){const f=e.target.files[0];if(f){this.selectedFile=f;this.uploadTitle=f.name.replace(/\.html?$/,'');this.showUploadForm=true}},
+handleDrop(e){this.dragover=false;const f=e.dataTransfer.files[0];if(f&&f.name.endsWith('.html')){this.selectedFile=f;this.uploadTitle=f.name.replace(/\.html?$/,'');this.showUploadForm=true}},
+cancelUpload(){this.showUploadForm=false;this.selectedFile=null;this.uploadTitle=''},
+async uploadFile(){if(!this.selectedFile)return;this.uploading=true;const f=new FormData();f.append('file',this.selectedFile);f.append('title',this.uploadTitle||this.selectedFile.name.replace(/\.html?$/,''));try{const r=await fetch(API+'/api/plans',{method:'POST',headers:{Authorization:this.token},body:f});const d=await r.json();if(r.ok){this.$message.success('上传成功！');this.showUploadForm=false;this.selectedFile=null;this.loadPlans()}else{this.$message.error(d.error||'上传失败')}}catch(e){this.$message.error('上传失败')}this.uploading=false},
+async deletePlan(p){this.$confirm('确定删除"'+p.title+'"吗？','提示',{type:'warning'}).then(async()=>{await fetch(API+'/api/plans/'+p.id,{method:'DELETE',headers:{Authorization:this.token}});this.$message.success('已删除');this.loadPlans()}).catch(()=>{})},
+async regenerateKey(p){this.$confirm('重置密钥后旧链接将失效，确定吗？','提示',{type:'warning'}).then(async()=>{const r=await fetch(API+'/api/plans/'+p.id+'/regenerate-key',{method:'POST',headers:{Authorization:this.token}});const d=await r.json();this.$message.success('新密钥: '+d.access_key);this.loadPlans()}).catch(()=>{})},
+openPreview(p){window.open(window.location.origin+'/plan/'+p.id+'?key='+p.access_key,'_blank')},
+copyShareUrl(p){this.copyText(window.location.origin+'/plan/'+p.id+'?key='+p.access_key)},
+copyKey(p){this.copyText(p.access_key)},copyText(t){navigator.clipboard.writeText(t).then(()=>this.$message.success('已复制')).catch(()=>{})},
+formatDate(d){return d?new Date(d).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-'},
+
+async loadUserInfo(){try{const r=await fetch(API+'/api/user/info',{headers:{Authorization:this.token}});if(r.ok)this.userInfo=await r.json()}catch(e){}},
+async changePassword(){if(!this.pwdForm.old_password||!this.pwdForm.new_password||this.pwdForm.new_password.length<4){this.pwdMsg='请填写完整（至少4位）';this.pwdMsgType='error';return}this.changingPwd=true;this.pwdMsg='';try{const r=await fetch(API+'/api/user/change-password',{method:'POST',headers:{'Content-Type':'application/json',Authorization:this.token},body:JSON.stringify(this.pwdForm)});const d=await r.json();if(r.ok){this.pwdMsg='✅ 密码修改成功！';this.pwdMsgType='success';this.pwdForm={old_password:'',new_password:''}}else{this.pwdMsg='❌ '+(d.error||'修改失败');this.pwdMsgType='error'}}catch(e){this.pwdMsg='❌ 网络错误';this.pwdMsgType='error'}this.changingPwd=false},
+
+// Three.js
+init3D(){const c=document.getElementById('three-bg');const s=new THREE.Scene();const m=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);m.position.z=35;const r=new THREE.WebGLRenderer({alpha:true,antialias:true});r.setSize(innerWidth,innerHeight);r.setPixelRatio(Math.min(devicePixelRatio,2));c.appendChild(r.domElement);const sh=[];const co=[0xa78bfa,0xc084fc,0xec4899,0x2dd4bf,0xfbbf24];const ge=[new THREE.IcosahedronGeometry(0.5,0),new THREE.OctahedronGeometry(0.4,0),new THREE.TorusKnotGeometry(0.35,0.12,30,5),new THREE.DodecahedronGeometry(0.4,0)];for(let i=0;i<30;i++){const g=ge[i%ge.length];const mat=new THREE.MeshPhysicalMaterial({color:co[i%co.length],metalness:0.1,roughness:0.4,transparent:true,opacity:0.06+Math.random()*0.12,wireframe:Math.random()>0.6});const mesh=new THREE.Mesh(g,mat);mesh.position.set((Math.random()-.5)*120,(Math.random()-.5)*80,(Math.random()-.5)*50-10);mesh.rotation.set(Math.random()*6,Math.random()*6,0);mesh.scale.setScalar(.5+Math.random()*1.5);mesh.userData={rx:(Math.random()-.5)*0.012,ry:(Math.random()-.5)*0.012,fy:0.002+Math.random()*0.006,fo:Math.random()*6};s.add(mesh);sh.push(mesh)}
+const sg=new THREE.BufferGeometry();const sc=800;const p=new Float32Array(sc*3);for(let i=0;i<sc*3;i++)p[i]=(Math.random()-.5)*400;sg.setAttribute('position',new THREE.BufferAttribute(p,3));const stars=new THREE.Points(sg,new THREE.PointsMaterial({size:0.18,color:0xa78bfa,transparent:true,opacity:0.3}));s.add(stars);let t=0;
+function anim(){requestAnimationFrame(anim);t+=0.003;sh.forEach(sh=>{sh.rotation.x+=sh.userData.rx;sh.rotation.y+=sh.userData.ry;sh.position.y+=Math.sin(t*sh.userData.fy+sh.userData.fo)*0.008});stars.rotation.y+=0.0001;m.position.x=Math.sin(t*0.01)*3;m.position.y=Math.sin(t*0.007)*2;m.lookAt(0,0,-5);r.render(s,m)}
+anim();window.addEventListener('resize',()=>{m.aspect=innerWidth/innerHeight;m.updateProjectionMatrix();r.setSize(innerWidth,innerHeight)})},
+
+// tsParticles
+async initParticles(){try{await tsParticles.load({id:'particles-bg',options:{fullScreen:{enable:false,zIndex:1},particles:{number:{value:20,density:{enable:true}},color:{value:['#a78bfa','#c084fc','#ec4899']},shape:{type:['circle']},opacity:{value:0.08,random:true},size:{value:2,random:{enable:true,minimumValue:1}},move:{enable:true,speed:0.2,direction:'none',random:true,outModes:'bounce'},links:{enable:true,distance:150,color:'#a78bfa',opacity:0.03,width:1}},interactivity:{events:{onHover:{enable:true,mode:'grab'}},modes:{grab:{distance:100,links:{opacity:0.06}}}}}})}catch(e){}},
+
+// Cursor
+initCursor(){const g=document.getElementById('cursorGlow');document.addEventListener('mousemove',e=>{g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'});document.addEventListener('mouseleave',()=>{g.style.opacity='0'});document.addEventListener('mouseenter',()=>{g.style.opacity='1'})},
+
+// Magnetic (react-bits)
+initMagnetic(){document.addEventListener('mousemove',e=>{document.querySelectorAll('.magnetic-btn').forEach(b=>{const r=b.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2,d=Math.sqrt(x*x+y*y);if(d<150){const s=Math.min(1,d/150);b.style.transform='translate('+x*0.15*s+'px,'+y*0.15*s+'px)'}else b.style.transform=''})});document.addEventListener('mouseleave',()=>{document.querySelectorAll('.magnetic-btn').forEach(b=>b.style.transform='')})},
+
+// Tilt (react-bits)
+initTilt(){document.querySelectorAll('.tilt-el').forEach(c=>{c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,rx=(y/r.height-.5)*6,ry=(x/r.width-.5)*-6;c.style.transform='perspective(600px) rotateX('+rx+'deg) rotateY('+ry+'deg) translateZ(5px)'});c.addEventListener('mouseleave',()=>{c.style.transform=''})})},
+
+// GSAP Animations
+animateIn(){gsap.from('#dashHeader',{y:-20,opacity:0,duration:.45,ease:'power3.out'});gsap.from('.tab-btn',{y:15,opacity:0,duration:.4,stagger:.08,ease:'back.out(1.7)',delay:.15});gsap.from('.stat-card',{y:25,opacity:0,duration:.5,stagger:.08,ease:'power3.out',delay:.3});gsap.from('#uploadCard,#plansCard',{y:30,opacity:0,duration:.55,stagger:.1,ease:'power3.out',delay:.45});gsap.from('.user-card',{y:30,opacity:0,duration:.5,stagger:.1,ease:'power3.out',delay:.3})}
+}});
+</script>
+</body></html>
