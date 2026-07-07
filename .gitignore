@@ -7,3 +7,5 @@ data/*.json
 *.bak2
 downloaded-libs/
 public/spa/
+.vercel
+.env*

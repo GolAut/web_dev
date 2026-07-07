@@ -1,0 +1,347 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅行计划 · 查看</title>
+<!-- CDN Libraries for 3D & Effects -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tsparticles/engine@3/tsparticles.engine.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tsparticles/slim@3/tsparticles.slim.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+body{font-family:'Noto Sans SC',sans-serif;overflow:hidden;background:#0a0a1a;color:#fff;height:100vh;width:100vw}
+#three-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0}
+#particles-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.overlay>*{pointer-events:auto}
+
+/* Glassmorphism Card */
+.glass-card{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:3rem 2.5rem;max-width:480px;width:90%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.1);transition:all .5s cubic-bezier(.23,1,.32,1)}
+.glass-card:hover{transform:translateY(-4px);box-shadow:0 35px 80px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.15)}
+
+.glass-icon{font-size:3.5rem;margin-bottom:1rem;display:block;filter:drop-shadow(0 0 20px rgba(100,200,255,0.3))}
+.glass-title{font-size:1.6rem;font-weight:700;margin-bottom:.5rem;background:linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.glass-desc{color:rgba(255,255,255,0.6);font-size:.9rem;margin-bottom:2rem;line-height:1.6}
+.key-input{width:100%;padding:1rem 1.2rem;border-radius:14px;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:1.1rem;text-align:center;letter-spacing:3px;outline:none;transition:all .3s;font-family:monospace}
+.key-input:focus{border-color:#60a5fa;box-shadow:0 0 20px rgba(96,165,250,0.2);background:rgba(255,255,255,0.1)}
+.key-input::placeholder{color:rgba(255,255,255,0.25);letter-spacing:1px}
+.key-submit{width:100%;padding:1rem;border-radius:14px;border:none;background:linear-gradient(135deg,#60a5fa,#a78bfa);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;margin-top:1rem;font-family:inherit}
+.key-submit:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(96,165,250,0.35)}
+.key-submit:active{transform:translateY(0)}
+.key-submit:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+.error-msg{color:#f87171;font-size:.85rem;margin-top:.8rem;display:none}
+.error-msg.show{display:block;animation:fadeIn .3s}
+
+.plan-info{display:none;margin-bottom:1.5rem;padding:1rem;border-radius:12px;background:rgba(255,255,255,0.05)}
+.plan-info.show{display:block;animation:fadeIn .5s}
+.plan-info h3{font-size:1.1rem;font-weight:600;margin-bottom:.3rem}
+.plan-info p{color:rgba(255,255,255,0.5);font-size:.8rem}
+.plan-info .views{color:rgba(96,165,250,0.6);font-size:.75rem;margin-top:.3rem}
+
+/* Key display */
+.key-display{display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:1rem;padding:.5rem;border-radius:10px;background:rgba(255,255,255,0.03);font-size:.8rem;color:rgba(255,255,255,0.4)}
+.key-display code{color:#60a5fa;font-family:monospace;padding:.2rem .5rem;border-radius:6px;background:rgba(96,165,250,0.1);cursor:pointer;transition:all .2s}
+.key-display code:hover{background:rgba(96,165,250,0.2)}
+
+/* Loading spinner */
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid rgba(255,255,255,0.1);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* Iframe plan viewer */
+.plan-viewer{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;background:#fff}
+.plan-viewer.show{display:block;animation:fadeSlideIn .6s cubic-bezier(.23,1,.32,1)}
+@keyframes fadeSlideIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.plan-viewer iframe{width:100%;height:100%;border:none}
+.plan-viewer .close-btn{position:fixed;top:20px;right:20px;z-index:11;width:44px;height:44px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);color:#fff;font-size:1.4rem;cursor:pointer;transition:all .3s;display:flex;align-items:center;justify-content:center}
+.plan-viewer .close-btn:hover{background:rgba(0,0,0,0.8);transform:rotate(90deg)}
+
+/* Responsive */
+@media(max-width:600px){
+  .glass-card{padding:2rem 1.5rem;margin:1rem}
+  .glass-title{font-size:1.3rem}
+  .glass-icon{font-size:2.5rem}
+}
+</style>
+</head>
+<body>
+  <div id="three-bg"></div>
+  <div id="particles-bg"></div>
+
+  <div class="overlay" id="overlay">
+    <div class="glass-card animate__animated animate__fadeInUp" id="main-card">
+      <span class="glass-icon">🗺️</span>
+      <div class="glass-title">旅行计划</div>
+      <div class="glass-desc">输入分享给你的密钥，解锁专属旅行计划</div>
+
+      <div class="plan-info" id="planInfo">
+        <h3 id="planTitle">-</h3>
+        <p id="planMeta">-</p>
+        <div class="views" id="planViews"></div>
+      </div>
+
+      <input class="key-input" id="keyInput" type="text" placeholder="输入 8 位密钥" maxlength="8" autocomplete="off">
+      <div class="error-msg" id="errorMsg">🔑 密钥无效，请重新输入</div>
+      <button class="key-submit" id="submitBtn">✨ 解锁查看</button>
+
+      <div class="key-display" id="keyDisplay">
+        提示：密钥在管理者分享的链接中
+      </div>
+    </div>
+  </div>
+
+  <div class="plan-viewer" id="planViewer">
+    <button class="close-btn" id="downloadBtn" style="right:80px;font-size:1rem" title="Download">⬇</button><button class="close-btn" id="closeBtn">✕</button>
+    <iframe id="planIframe" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+  </div>
+
+<script>
+// === Get Plan ID from URL ===
+const pathParts = window.location.pathname.split('/');
+const planId = pathParts[pathParts.length - 1] || '';
+const urlKey = new URLSearchParams(window.location.search).get('key') || '';
+
+// === Three.js: 3D Space Scene ===
+(function() {
+  const container = document.getElementById('three-bg');
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.0008);
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.z = 30;
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  // Floating geometric shapes
+  const geometries = [
+    new THREE.IcosahedronGeometry(1.2, 0),
+    new THREE.OctahedronGeometry(1.0, 0),
+    new THREE.TorusKnotGeometry(0.8, 0.3, 50, 8),
+    new THREE.DodecahedronGeometry(0.9, 0),
+    new THREE.TetrahedronGeometry(1.1, 0),
+    new THREE.BoxGeometry(0.8, 0.8, 0.8)
+  ];
+  const colors = [0x60a5fa, 0xa78bfa, 0xf472b6, 0x34d399, 0xfbbf24, 0x818cf8];
+
+  const meshes = [];
+  for (let i = 0; i < 40; i++) {
+    const geom = geometries[i % geometries.length];
+    const color = colors[i % colors.length];
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: color,
+      metalness: 0.3,
+      roughness: 0.4,
+      transparent: true,
+      opacity: 0.15 + Math.random() * 0.35,
+      wireframe: Math.random() > 0.5
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(
+      (Math.random() - 0.5) * 120,
+      (Math.random() - 0.5) * 80,
+      (Math.random() - 0.5) * 60 - 10
+    );
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.userData = {
+      rotSpeed: { x: (Math.random() - 0.5) * 0.02, y: (Math.random() - 0.5) * 0.02 },
+      floatSpeed: 0.005 + Math.random() * 0.01,
+      floatOffset: Math.random() * Math.PI * 2
+    };
+    scene.add(mesh);
+    meshes.push(mesh);
+  }
+
+  // Stars
+  const starsGeom = new THREE.BufferGeometry();
+  const starCount = 1500;
+  const positions = new Float32Array(starCount * 3);
+  const starColors = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount * 3; i++) {
+    positions[i] = (Math.random() - 0.5) * 400;
+    starColors[i] = 0.5 + Math.random() * 0.5;
+  }
+  starsGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  starsGeom.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+  const starsMat = new THREE.PointsMaterial({ size: 0.3, vertexColors: true, transparent: true, opacity: 0.8 });
+  const stars = new THREE.Points(starsGeom, starsMat);
+  scene.add(stars);
+
+  // Connected lines network
+  const linePoints = [];
+  for (let i = 0; i < 60; i++) {
+    linePoints.push(new THREE.Vector3(
+      (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 60
+    ));
+  }
+  const lineGeom = new THREE.BufferGeometry().setFromPoints(linePoints);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.05 });
+  const line = new THREE.Line(lineGeom, lineMat);
+  scene.add(line);
+
+  // Animation
+  let time = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    time += 0.005;
+    meshes.forEach(m => {
+      m.rotation.x += m.userData.rotSpeed.x;
+      m.rotation.y += m.userData.rotSpeed.y;
+      m.position.y += Math.sin(time * m.userData.floatSpeed + m.userData.floatOffset) * 0.02;
+    });
+    stars.rotation.y += 0.0002;
+    line.rotation.y += 0.0001;
+    camera.position.x = Math.sin(time * 0.02) * 5;
+    camera.position.y = Math.sin(time * 0.015) * 3;
+    camera.lookAt(0, 0, -5);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+
+// === Particles ===
+(async function() {
+  try {
+    await tsParticles.load({ id: 'particles-bg', options: {
+      fullScreen: { enable: false, zIndex: 1 },
+      particles: {
+        number: { value: 60, density: { enable: true } },
+        color: { value: ['#60a5fa', '#a78bfa', '#f472b6', '#34d399'] },
+        shape: { type: ['circle', 'triangle'] },
+        opacity: { value: 0.3, random: true },
+        size: { value: 3, random: { enable: true, minimumValue: 1 } },
+        move: { enable: true, speed: 0.5, direction: 'none', random: true, outModes: 'bounce' },
+        links: { enable: true, distance: 120, color: '#60a5fa', opacity: 0.1, width: 1 }
+      },
+      interactivity: {
+        events: { onHover: { enable: true, mode: 'grab' }, onClick: { enable: true, mode: 'push' } },
+        modes: { grab: { distance: 140, links: { opacity: 0.3 } }, push: { quantity: 4 } }
+      }
+    }});
+  } catch(e) { console.log('Particles skip:', e.message); }
+})();
+
+// === App Logic ===
+const keyInput = document.getElementById('keyInput');
+const submitBtn = document.getElementById('submitBtn');
+const errorMsg = document.getElementById('errorMsg');
+const planInfo = document.getElementById('planInfo');
+const planTitle = document.getElementById('planTitle');
+const planMeta = document.getElementById('planMeta');
+const planViews = document.getElementById('planViews');
+const planViewer = document.getElementById('planViewer');
+const planIframe = document.getElementById('planIframe');
+const closeBtn = document.getElementById('closeBtn');
+const keyDisplay = document.getElementById('keyDisplay');
+const mainCard = document.getElementById('main-card');
+
+let planData = null;
+
+// Load plan info on mount
+async function loadPlanInfo() {
+  try {
+    const res = await fetch('/api/plan-content/' + planId + '?key=' + urlKey).catch(() => null); if (res && res.ok) { const infoText = await res.text(); }
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+    planData = data;
+    planTitle.textContent = data.title;
+    planMeta.textContent = data.original_name + ' · ' + new Date(data.created_at).toLocaleDateString('zh-CN');
+    planViews.textContent = '👁️ ' + (data.views || 0) + ' 次查看';
+    planInfo.classList.add('show');
+
+    // If key in URL, auto-submit
+    if (urlKey) {
+      keyInput.value = urlKey;
+      submitBtn.click();
+    }
+  } catch(e) {
+    planInfo.classList.add('show');
+    planTitle.textContent = '旅行计划 #' + planId;
+    planMeta.textContent = '加载计划信息...';
+    if (urlKey) submitBtn.click();
+  }
+}
+loadPlanInfo();
+
+// Submit key
+submitBtn.addEventListener('click', async function() {
+  const key = keyInput.value.trim();
+  if (!key || key.length < 4) {
+    showError('请输入完整密钥');
+    return;
+  }
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner"></span>验证中...';
+  errorMsg.classList.remove('show');
+
+  try {
+    const res = await fetch('/api/plan-content/' + planId + '?key=' + encodeURIComponent(key));
+    if (!res.ok) {
+      showError('🔑 密钥无效，请重新输入');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '✨ 重新尝试';
+      return;
+    }
+    const html = await res.text(); window._lastPlanHtml = html;
+
+    // Celebration!
+    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#60a5fa','#a78bfa','#f472b6','#34d399','#fbbf24'] });
+
+    // Show plan
+    setTimeout(() => {
+      planIframe.srcdoc = html;
+      planViewer.classList.add('show');
+      document.getElementById('overlay').style.display = 'none';
+    }, 500);
+
+  } catch(e) {
+    showError('网络错误，请重试');
+    submitBtn.disabled = false;
+    submitBtn.textContent = '✨ 解锁查看';
+  }
+});
+
+// Close viewer
+downloadBtn.addEventListener('click', () => { const key = new URLSearchParams(location.search).get('key') || ''; if (key) { window.open(location.origin + '/api/plans/' + planId + '/download?key=' + encodeURIComponent(key)); return; }
+    const h = window._lastPlanHtml;
+    if (!h) return;
+    const b = new Blob([h], {type:'text/html;charset=utf-8'});
+    const u = URL.createObjectURL(b);
+    const a = document.createElement('a');
+    a.href = u;
+    a.download = 'travel-plan.html';
+    a.click();
+    URL.revokeObjectURL(u);
+  });
+
+  closeBtn.addEventListener('click', () => {
+  planViewer.classList.remove('show');
+  document.getElementById('overlay').style.display = 'flex';
+  submitBtn.disabled = false;
+  submitBtn.textContent = '✨ 解锁查看';
+});
+
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.classList.add('show');
+}
+
+// Enter key
+keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitBtn.click(); });
+
+// Auto-focus key input
+keyInput.focus();
+</script>
+</body>
+</html>

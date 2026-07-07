@@ -25,7 +25,7 @@ function verifyPassword(pw, hash) {
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const UPLOADS_DIR = path.join(__dirname, "uploads");
+const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
 const ADMIN_TOKEN = "tp-admin-" + crypto.randomBytes(16).toString("hex");
 
 app.use(express.json());
@@ -63,7 +63,7 @@ function requireAdmin(req, res, next) {
 
 async function init() {
   if (!useKV) {
-    [UPLOADS_DIR, path.join(__dirname, "data")].forEach((d) => {
+    [UPLOADS_DIR, path.join(__dirname, "..", "data")].forEach((d) => {
       if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
     });
   }
