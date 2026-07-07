@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
@@ -6,13 +6,15 @@ const fs = require("fs");
 const crypto = require("crypto");
 
 // Use Vercel KV backend when KV environment variables are set
-const useKV = !!process.env.VERCEL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+const useKV = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 let db;
-
 if (useKV) {
   db = require("./db-vercel");
+} else if (process.env.VERCEL) {
+  db = require("./db-memory");
 } else {
   db = require("./db");
+}
 }
 
 // Simple password hashing (SHA256, no bcrypt dependency)
@@ -85,7 +87,7 @@ app.post("/api/login", async (req, res) => {
     const { username, password } = req.body;
     const admin = await db.findAdmin(username);
     if (!admin || !verifyPassword(password, admin.password_hash)) {
-      return res.status(401).json({ error: "用户名或密码错误" });
+      return res.status(401).json({ error: "闁活潿鍔嶉崺娑㈠触瀹ュ棗鐏楅悗闈涙閻栨粓鏌ㄥ▎鎺濆殩" });
     }
     await db.addLoginLog({
       username,
@@ -116,7 +118,7 @@ app.get("/api/plans", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/plans", requireAdmin, upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "请上传HTML文件" });
+  if (!req.file) return res.status(400).json({ error: "閻犲洩娓圭粭鍌涘閻曟考ML闁哄倸娲ｅ▎? });
   const title = req.body.title || req.file.originalname.replace(/\.html?$/, "");
   const plan = {
     id: await db.nextPlanId(), title,
@@ -173,20 +175,20 @@ app.get("/api/user/info", requireAdmin, async (req, res) => {
 app.post("/api/user/change-password", requireAdmin, async (req, res) => {
   const { old_password, new_password } = req.body;
   if (!old_password || !new_password || new_password.length < 4)
-    return res.status(400).json({ error: "请提供有效密码" });
+    return res.status(400).json({ error: "閻犲洭鏀辫ぐ浣圭瑹濞戞瑦绠掗柡浣哥墕閻︽垿鎯? });
   const admin = await db.findAdmin("admin");
   if (!admin || !verifyPassword(old_password, admin.password_hash))
-    return res.status(401).json({ error: "旧密码错误" });
+    return res.status(401).json({ error: "闁哄唲鍐闁活喕绶氶弫濠勬嫚? });
   await db.updateAdmin("admin", { password_hash: hashPassword(new_password) });
-  res.json({ success: true, message: "密码已修改" });
+  res.json({ success: true, message: "閻庨潧妫涢悥婊冾啅闊厽鍙忛柡鈧? });
 });
 
 // ===== VIEW / DOWNLOAD =====
 app.get("/api/plan-content/:id", async (req, res) => {
   const plan = await db.findPlan(parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "计划不存在" });
+  if (!plan) return res.status(404).json({ error: "閻犱讲鈧啿鐏婂☉鎾崇Т閻°劑宕? });
   if (req.query.key !== plan.access_key && req.headers["authorization"] !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "密钥无效" });
+    return res.status(403).json({ error: "閻庨潧妫濋幐婊堝籍閻樿櫕娅? });
   await db.incrementViews(plan.id);
   if (plan.file_content) {
     const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
@@ -194,15 +196,15 @@ app.get("/api/plan-content/:id", async (req, res) => {
     return res.send(html);
   }
   const fp = path.join(UPLOADS_DIR, plan.filename);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: "文件不存在" });
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: "闁哄倸娲ｅ▎銏＄▔瀹ュ懐鎽犻柛? });
   res.sendFile(fp);
 });
 
 app.get("/api/plans/:id/download", async (req, res) => {
   const plan = await db.findPlan(parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "计划不存在" });
+  if (!plan) return res.status(404).json({ error: "閻犱讲鈧啿鐏婂☉鎾崇Т閻°劑宕? });
   if (req.query.key !== plan.access_key && req.headers["authorization"] !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "密钥无效" });
+    return res.status(403).json({ error: "閻庨潧妫濋幐婊堝籍閻樿櫕娅? });
   const filename = plan.original_name || "travel-plan.html";
   if (plan.file_content) {
     const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
@@ -211,7 +213,7 @@ app.get("/api/plans/:id/download", async (req, res) => {
     return res.send(html);
   }
   const fp = path.join(UPLOADS_DIR, plan.filename);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: "文件不存在" });
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: "闁哄倸娲ｅ▎銏＄▔瀹ュ懐鎽犻柛? });
   res.download(fp, filename);
 });
 
