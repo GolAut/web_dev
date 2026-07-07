@@ -1,9 +1,6 @@
 {
   "version": 2,
-  "functions": {
-    "api/catch-all.js": {
-      "memory": 512,
-      "maxDuration": 30
-    }
-  }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/server" }
+  ]
 }
