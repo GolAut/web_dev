@@ -246,6 +246,16 @@ app.get("/", (req, res) => res.redirect("/index.html"));
 // === Debug ===
 app.get("/api/debug", async (req, res) => {
   try {
+    var testResp = await fetch(KV_URL + "/get/test_key", { headers: { Authorization: "Bearer " + KV_TOKEN } });
+    var testData = await testResp.text();
+    return res.json({ status: testResp.status, body: testData, url: KV_URL ? KV_URL.substring(0,50) : "missing" });
+  } catch(e) {
+    return res.json({ error: e.message, cause: e.cause?.message, code: e.cause?.code });
+  }
+});
+
+app.get("/api/debug2", async (req, res) => {
+  try {
     var ids = await kv_smembers("plan_ids");
     res.json({ plans: ids.length, kv_url: KV_URL ? "set" : "missing", kv_token: KV_TOKEN ? "set" : "missing" });
   } catch(e) { res.json({ error: e.message }); }
