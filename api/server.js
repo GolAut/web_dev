@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 
 // Use Vercel KV backend when KV environment variables are set
-const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+const useKV = !!process.env.VERCEL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 let db;
 
 if (useKV) {
