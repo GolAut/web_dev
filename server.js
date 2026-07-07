@@ -85,7 +85,7 @@ app.post("/api/login", async (req, res) => {
     const { username, password } = req.body;
     const admin = await db.findAdmin(username);
     if (!admin || !verifyPassword(password, admin.password_hash)) {
-      return res.status(401).json({ error: "閻劍鍩涢崥宥嗗灗鐎靛棛鐖滈柨娆掝嚖" });
+      return res.status(401).json({ error: "Unknown error" });
     }
     await db.addLoginLog({
       username,
@@ -116,7 +116,7 @@ app.get("/api/plans", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/plans", requireAdmin, upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "鐠囪渹绗傛导鐕濼ML閺傚洣娆? });
+  if (!req.file) return res.status(400).json({ error: "Please upload an HTML file" });
   const title = req.body.title || req.file.originalname.replace(/\.html?$/, "");
   const plan = {
     id: await db.nextPlanId(), title,
@@ -173,20 +173,20 @@ app.get("/api/user/info", requireAdmin, async (req, res) => {
 app.post("/api/user/change-password", requireAdmin, async (req, res) => {
   const { old_password, new_password } = req.body;
   if (!old_password || !new_password || new_password.length < 4)
-    return res.status(400).json({ error: "鐠囬攱褰佹笟娑欐箒閺佸牆鐦戦惍? });
+    return res.status(400).json({ error: "Please provide a valid password" });
   const admin = await db.findAdmin("admin");
   if (!admin || !verifyPassword(old_password, admin.password_hash))
-    return res.status(401).json({ error: "閺冄冪槕閻線鏁婄拠? });
+    return res.status(401).json({ error: "Old password is incorrect" });
   await db.updateAdmin("admin", { password_hash: hashPassword(new_password) });
-  res.json({ success: true, message: "鐎靛棛鐖滃韫叏閺€? });
+  res.json({ success: true, message: "Password changed successfully" });
 });
 
 // ===== VIEW / DOWNLOAD =====
 app.get("/api/plan-content/:id", async (req, res) => {
   const plan = await db.findPlan(parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "鐠佲€冲灊娑撳秴鐡ㄩ崷? });
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
   if (req.query.key !== plan.access_key && req.headers["authorization"] !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "鐎靛棝鎸滈弮鐘虫櫏" });
+    return res.status(403).json({ error: "Invalid access key" });
   await db.incrementViews(plan.id);
   if (plan.file_content) {
     const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
@@ -194,15 +194,15 @@ app.get("/api/plan-content/:id", async (req, res) => {
     return res.send(html);
   }
   const fp = path.join(UPLOADS_DIR, plan.filename);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: "閺傚洣娆㈡稉宥呯摠閸? });
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: "File not found" });
   res.sendFile(fp);
 });
 
 app.get("/api/plans/:id/download", async (req, res) => {
   const plan = await db.findPlan(parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "鐠佲€冲灊娑撳秴鐡ㄩ崷? });
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
   if (req.query.key !== plan.access_key && req.headers["authorization"] !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "鐎靛棝鎸滈弮鐘虫櫏" });
+    return res.status(403).json({ error: "Invalid access key" });
   const filename = plan.original_name || "travel-plan.html";
   if (plan.file_content) {
     const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
@@ -211,7 +211,7 @@ app.get("/api/plans/:id/download", async (req, res) => {
     return res.send(html);
   }
   const fp = path.join(UPLOADS_DIR, plan.filename);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: "閺傚洣娆㈡稉宥呯摠閸? });
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: "File not found" });
   res.download(fp, filename);
 });
 
