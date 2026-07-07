@@ -1,176 +1,195 @@
 
 const express = require("express");
 const crypto = require("crypto");
+const { kv } = require("@vercel/kv");
 
-// === In-Memory Database ===
-let admins = [];
-let plans = [];
-let logs = [];
-let nextId = 1;
-
-const ADMIN_TOKEN = "tp-admin-" + crypto.randomBytes(16).toString("hex");
-
-function hashPw(pw) { return crypto.createHash("sha256").update(pw + "tp-salt-2024").digest("hex"); }
-
-// === Express App ===
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 
-// Multer-like: parse multipart manually (simple base64 approach for Vercel)
-// We'll accept JSON with { title, content (base64 HTML) } for uploads
-// plus keep the multer version for local dev
+const ADMIN_TOKEN = "tp-admin-" + crypto.randomBytes(16).toString("hex");
 
-// === Auth Middleware ===
+// === Helpers ===
+function hashPw(pw) { return crypto.createHash("sha256").update(pw + "tp-salt-2024").digest("hex"); }
+function k(key) { return "tp:" + key; }
+
 function requireAdmin(req, res, next) {
   if (req.headers.authorization === ADMIN_TOKEN) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 
-// === Init ===
-(function init() {
-  admins.push({
-    username: "admin",
-    password_hash: hashPw("admin123"),
-    created_at: new Date().toISOString(),
-    total_logins: 0
-  });
-})();
+// === Init admin (deferred, runs on first request) ===
+var initDone = false;
+async function ensureInit() {
+  if (initDone) return;
+  try {
+    var admin = await kv.hgetall(k("admin:admin"));
+    if (!admin || !admin.username) {
+      await kv.hset(k("admin:admin"), {
+        username: "admin",
+        password_hash: hashPw("admin123"),
+        created_at: new Date().toISOString(),
+        total_logins: "0"
+      });
+    }
+    initDone = true;
+  } catch(e) {
+    console.error("KV init error:", e.message);
+    throw e;
+  }
+}
 
 // === AUTH ===
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => { try { await ensureInit(); } catch(e) { return res.status(500).json({ error: "KV connection failed" }); }
   try {
     const { username, password } = req.body;
-    const admin = admins.find(a => a.username === username);
-    if (!admin || hashPw(password) !== admin.password_hash) {
+    const admin = await kv.hgetall(k("admin:" + username));
+    if (!admin || !admin.username || hashPw(password) !== admin.password_hash) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    admin.total_logins = (admin.total_logins || 0) + 1;
-    admin.last_login = new Date().toISOString();
-    logs.push({
+    var logins = parseInt(admin.total_logins || 0) + 1;
+    await kv.hset(k("admin:" + username), { total_logins: String(logins), last_login: new Date().toISOString() });
+    var logEntry = {
       username, time: new Date().toISOString(),
       ip: req.headers["x-forwarded-for"] || "local",
       agent: (req.headers["user-agent"] || "").substring(0, 200)
-    });
-    res.json({ token: ADMIN_TOKEN, username: admin.username });
+    };
+    await kv.lpush(k("logs:" + username), JSON.stringify(logEntry));
+    res.json({ token: ADMIN_TOKEN, username });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // === PLANS ===
-app.get("/api/plans", requireAdmin, (req, res) => {
-  const result = [...plans].reverse().map(p => ({
-    id: p.id, title: p.title, original_name: p.original_name,
-    access_key: p.access_key, created_at: p.created_at, views: p.views || 0,
-    share_url: "/view/" + p.id + "?key=" + p.access_key
-  }));
-  res.json(result);
+app.get("/api/plans", requireAdmin, async (req, res) => {
+  try {
+    var ids = await kv.smembers(k("plan_ids"));
+    var result = [];
+    for (var id of (ids || [])) {
+      var p = await kv.hgetall(k("plan:" + id));
+      if (p && p.id) {
+        result.push({ id: p.id, title: p.title, original_name: p.original_name, access_key: p.access_key, created_at: p.created_at, views: parseInt(p.views || 0), share_url: "/view/" + p.id + "?key=" + p.access_key });
+      }
+    }
+    result.sort((a,b) => parseInt(b.id) - parseInt(a.id));
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Upload via JSON (base64 content)
-app.post("/api/plans", requireAdmin, (req, res) => {
+app.post("/api/plans", requireAdmin, async (req, res) => {
   try {
-    const { title, content, filename } = req.body; // content = base64 HTML
+    const { title, content, filename } = req.body;
     if (!content) return res.status(400).json({ error: "Missing HTML content" });
-    
-    const plan = {
-      id: nextId++,
+    var nextId = String((await kv.incr(k("next_plan_id"))));
+    var plan = {
+      id: nextId,
       title: title || (filename || "untitled").replace(/\.html?$/, ""),
       original_name: filename || "travel-plan.html",
       access_key: crypto.randomBytes(4).toString("hex"),
       created_at: new Date().toISOString(),
-      views: 0,
-      file_content: content // store base64 directly
+      views: "0",
+      file_content: content
     };
-    plans.push(plan);
-    
+    await kv.hset(k("plan:" + nextId), plan);
+    await kv.sadd(k("plan_ids"), nextId);
+    res.json({ id: plan.id, title: plan.title, original_name: plan.original_name, access_key: plan.access_key, created_at: plan.created_at, views: 0, share_url: "/view/" + plan.id + "?key=" + plan.access_key });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete("/api/plans/:id", requireAdmin, async (req, res) => {
+  try {
+    var id = req.params.id;
+    var plan = await kv.hgetall(k("plan:" + id));
+    if (!plan || !plan.id) return res.status(404).json({ error: "Plan not found" });
+    await kv.del(k("plan:" + id));
+    await kv.srem(k("plan_ids"), id);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/plans/:id/regenerate-key", requireAdmin, async (req, res) => {
+  try {
+    var id = req.params.id;
+    var plan = await kv.hgetall(k("plan:" + id));
+    if (!plan || !plan.id) return res.status(404).json({ error: "Plan not found" });
+    var newKey = crypto.randomBytes(4).toString("hex");
+    await kv.hset(k("plan:" + id), { access_key: newKey });
+    res.json({ access_key: newKey, share_url: "/view/" + id + "?key=" + newKey });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// === USER ===
+app.get("/api/user/info", requireAdmin, async (req, res) => {
+  try {
+    var username = req.query.username || "admin";
+    var admin = await kv.hgetall(k("admin:" + username));
+    if (!admin || !admin.username) return res.status(404).json({ error: "User not found" });
+    var rawLogs = await kv.lrange(k("logs:" + username), 0, 49);
+    var history = (rawLogs || []).map(l => { try { return JSON.parse(l); } catch(e) { return l; } });
     res.json({
-      id: plan.id, title: plan.title, original_name: plan.original_name,
-      access_key: plan.access_key, created_at: plan.created_at, views: plan.views,
-      share_url: "/view/" + plan.id + "?key=" + plan.access_key
+      username: admin.username,
+      total_logins: parseInt(admin.total_logins || 0),
+      last_login: admin.last_login || null,
+      created_at: admin.created_at || null,
+      login_history: history
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete("/api/plans/:id", requireAdmin, (req, res) => {
-  const idx = plans.findIndex(p => p.id === parseInt(req.params.id));
-  if (idx === -1) return res.status(404).json({ error: "Plan not found" });
-  plans.splice(idx, 1);
-  res.json({ success: true });
-});
-
-app.post("/api/plans/:id/regenerate-key", requireAdmin, (req, res) => {
-  const plan = plans.find(p => p.id === parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "Plan not found" });
-  plan.access_key = crypto.randomBytes(4).toString("hex");
-  res.json({ access_key: plan.access_key, share_url: "/view/" + plan.id + "?key=" + plan.access_key });
-});
-
-// === USER ===
-app.get("/api/user/info", requireAdmin, (req, res) => {
-  const username = req.query.username || "admin";
-  const admin = admins.find(a => a.username === username);
-  if (!admin) return res.status(404).json({ error: "User not found" });
-  const userLogs = logs.filter(l => l.username === username).slice(0, 50);
-  res.json({
-    username: admin.username,
-    total_logins: admin.total_logins || 0,
-    last_login: admin.last_login || null,
-    created_at: admin.created_at || null,
-    login_history: userLogs
-  });
-});
-
-app.post("/api/user/change-password", requireAdmin, (req, res) => {
-  const { old_password, new_password } = req.body;
-  if (!old_password || !new_password || new_password.length < 4)
-    return res.status(400).json({ error: "Invalid password" });
-  const admin = admins.find(a => a.username === "admin");
-  if (!admin || hashPw(old_password) !== admin.password_hash)
-    return res.status(401).json({ error: "Old password incorrect" });
-  admin.password_hash = hashPw(new_password);
-  res.json({ success: true, message: "Password changed" });
+app.post("/api/user/change-password", requireAdmin, async (req, res) => {
+  try {
+    const { old_password, new_password } = req.body;
+    if (!old_password || !new_password || new_password.length < 4)
+      return res.status(400).json({ error: "Invalid password" });
+    var admin = await kv.hgetall(k("admin:admin"));
+    if (!admin || hashPw(old_password) !== admin.password_hash)
+      return res.status(401).json({ error: "Old password incorrect" });
+    await kv.hset(k("admin:admin"), { password_hash: hashPw(new_password) });
+    res.json({ success: true, message: "Password changed" });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // === VIEW ===
-app.get("/api/plan-content/:id", (req, res) => {
-  const plan = plans.find(p => p.id === parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "Plan not found" });
-  if (req.query.key !== plan.access_key && req.headers.authorization !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "Invalid access key" });
-  plan.views = (plan.views || 0) + 1;
-  const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
+app.get("/api/plan-content/:id", async (req, res) => {
+  try {
+    var id = req.params.id;
+    var plan = await kv.hgetall(k("plan:" + id));
+    if (!plan || !plan.id) return res.status(404).json({ error: "Plan not found" });
+    if (req.query.key !== plan.access_key && req.headers.authorization !== ADMIN_TOKEN)
+      return res.status(403).json({ error: "Invalid access key" });
+    var views = parseInt(plan.views || 0) + 1;
+    await kv.hset(k("plan:" + id), { views: String(views) });
+    var html = Buffer.from(plan.file_content, "base64").toString("utf-8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/plans/:id/download", (req, res) => {
-  const plan = plans.find(p => p.id === parseInt(req.params.id));
-  if (!plan) return res.status(404).json({ error: "Plan not found" });
-  if (req.query.key !== plan.access_key && req.headers.authorization !== ADMIN_TOKEN)
-    return res.status(403).json({ error: "Invalid access key" });
-  const html = Buffer.from(plan.file_content, "base64").toString("utf-8");
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Content-Disposition", "attachment; filename=\"" + encodeURIComponent(plan.original_name) + "\"");
-  res.send(html);
+app.get("/api/plans/:id/download", async (req, res) => {
+  try {
+    var id = req.params.id;
+    var plan = await kv.hgetall(k("plan:" + id));
+    if (!plan || !plan.id) return res.status(404).json({ error: "Plan not found" });
+    if (req.query.key !== plan.access_key && req.headers.authorization !== ADMIN_TOKEN)
+      return res.status(403).json({ error: "Invalid access key" });
+    var html = Buffer.from(plan.file_content, "base64").toString("utf-8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"" + encodeURIComponent(plan.original_name || "plan.html") + "\"");
+    res.send(html);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// === Static Routes (serve public/ HTML) ===
-const fs = require("fs");
-const path = require("path");
-const publicDir = path.join(__dirname, "public");
-
+// === Static Routes ===
 app.get("/view/:id", (req, res) => {
-  // Redirect to static viewer.html with plan ID and key as query params
-  var qs = req.query.key ? "?id=" + req.params.id + "&key=" + encodeURIComponent(req.query.key) : "?id=" + req.params.id;
+  var qs = "?id=" + req.params.id;
+  if (req.query.key) qs += "&key=" + encodeURIComponent(req.query.key);
   res.redirect("/viewer.html" + qs);
 });
-
-app.get("/admin", (req, res) => {
-  res.redirect("/index.html");
-});
-
+app.get("/admin", (req, res) => res.redirect("/index.html"));
 app.get("/", (req, res) => res.redirect("/index.html"));
 
-// Catch-all
-app.get("/api/debug", (req, res) => res.json({ plans: plans.length, admins: admins.length, logs: logs.length }));
+// === Debug ===
+app.get("/api/debug", async (req, res) => {
+  var ids = await kv.smembers(k("plan_ids"));
+  res.json({ plans: (ids || []).length, kv_connected: true });
+});
 
 module.exports = app;
