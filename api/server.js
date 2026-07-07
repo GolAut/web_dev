@@ -159,18 +159,16 @@ const path = require("path");
 const publicDir = path.join(__dirname, "public");
 
 app.get("/view/:id", (req, res) => {
-  const fp = path.join(publicDir, "viewer.html");
-  if (fs.existsSync(fp)) return res.sendFile(fp);
-  res.send("Viewer not found");
+  // Redirect to static viewer.html with plan ID and key as query params
+  var qs = req.query.key ? "?id=" + req.params.id + "&key=" + encodeURIComponent(req.query.key) : "?id=" + req.params.id;
+  res.redirect("/viewer.html" + qs);
 });
 
 app.get("/admin", (req, res) => {
-  const fp = path.join(publicDir, "index.html");
-  if (fs.existsSync(fp)) return res.sendFile(fp);
-  res.send("Admin not found");
+  res.redirect("/index.html");
 });
 
-app.get("/", (req, res) => res.redirect("/admin"));
+app.get("/", (req, res) => res.redirect("/index.html"));
 
 // Catch-all
 app.get("/api/debug", (req, res) => res.json({ plans: plans.length, admins: admins.length, logs: logs.length }));
